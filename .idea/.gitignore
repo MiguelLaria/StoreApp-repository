@@ -1,10 +1,22 @@
-# Default ignored files
-/shelf/
-/workspace.xml
-# Ignored default folder with query files
-/queries/
-# Datasource local storage ignored files
-/dataSources/
-/dataSources.local.xml
-# Editor-based HTTP Client requests
-/httpRequests/
+# ─── Java / Maven ────────────────────
+target/
+*.class
+*.jar
+*.war
+*.ear
+# ─── Spring Boot / IntelliJ ──────────
+.idea/
+*.iml
+.vscode/
+# ─── Variáveis de ambiente ───────────
+.env
+.env.local
+.env.*.local
+application-local.properties
+application-local.yml
+# ─── Logs ───────────────────────────
+*.log
+logs/
+# ─── Sistema operativo ───────────────
+.DS_Store
+Thumbs.db
