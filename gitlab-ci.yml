@@ -1,0 +1,186 @@
+# ═══════════════════════════════════════════════════════════════════
+# Pipeline CI/CD — Microservices Academy
+# openUp — Microservices + DevOps + Cloud Academy
+# ═══════════════════════════════════════════════════════════════════
+
+image: maven:3.9-eclipse-temurin-21
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end"
+  DOCKER_TLS_CERTDIR: "/certs"
+  PRODUCT_IMAGE: $CI_REGISTRY_IMAGE/product-service
+  ORDER_IMAGE: $CI_REGISTRY_IMAGE/order-service
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .m2/repository/
+  policy: pull-push
+
+stages:
+  - build
+  - test
+  - security
+  - docker
+  - deploy
+
+# ═══════════════════════════════════════════════════════════════════
+# STAGE 1 — BUILD
+# ═══════════════════════════════════════════════════════════════════
+
+build:product-service:
+  stage: build
+  script:
+    - cd product-service
+    - mvn $MAVEN_CLI_OPTS compile
+    - mvn $MAVEN_CLI_OPTS package -DskipTests
+  artifacts:
+    name: "$CI_JOB_NAME-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - product-service/target/*.jar
+    expire_in: 1 hour
+  rules:
+    - changes:
+        - product-service/**/*
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+build:order-service:
+  stage: build
+  script:
+    - cd order-service
+    - mvn $MAVEN_CLI_OPTS compile
+    - mvn $MAVEN_CLI_OPTS package -DskipTests
+  artifacts:
+    paths:
+      - order-service/target/*.jar
+    expire_in: 1 hour
+  rules:
+    - changes:
+        - order-service/**/*
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ═══════════════════════════════════════════════════════════════════
+# STAGE 2 — TEST
+# ═══════════════════════════════════════════════════════════════════
+
+test:product-service:
+  stage: test
+  script:
+    - cd product-service
+    - mvn $MAVEN_CLI_OPTS test
+    - mvn $MAVEN_CLI_OPTS jacoco:report
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  artifacts:
+    when: always
+    reports:
+      junit: product-service/target/surefire-reports/TEST-*.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: product-service/target/site/jacoco/jacoco.xml
+    paths:
+      - product-service/target/site/jacoco/
+    expire_in: 1 week
+  rules:
+    - changes:
+        - product-service/**/*
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+test:order-service:
+  stage: test
+  script:
+    - cd order-service
+    - mvn $MAVEN_CLI_OPTS test
+    - mvn $MAVEN_CLI_OPTS jacoco:report
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  artifacts:
+    when: always
+    reports:
+      junit: order-service/target/surefire-reports/TEST-*.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: order-service/target/site/jacoco/jacoco.xml
+  rules:
+    - changes:
+        - order-service/**/*
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ═══════════════════════════════════════════════════════════════════
+# STAGE 3 — SECURITY
+# ═══════════════════════════════════════════════════════════════════
+
+security:dependency-check:
+  stage: security
+  script:
+    - cd product-service
+    - >
+      mvn $MAVEN_CLI_OPTS
+      org.owasp:dependency-check-maven:check
+      -DfailBuildOnCVSS=8
+      -DsuppressionFile=../dependency-check-suppressions.xml
+  artifacts:
+    when: always
+    paths:
+      - product-service/target/dependency-check-report.html
+    expire_in: 1 week
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+
+include:
+  - template: Security/SAST.gitlab-ci.yml
+  - template: Security/Secret-Detection.gitlab-ci.yml
+
+# ═══════════════════════════════════════════════════════════════════
+# STAGE 4 — DOCKER
+# ═══════════════════════════════════════════════════════════════════
+
+docker:product-service:
+  stage: docker
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - |
+      docker build \
+        --tag $PRODUCT_IMAGE:$CI_COMMIT_SHORT_SHA \
+        --tag $PRODUCT_IMAGE:latest \
+        --cache-from $PRODUCT_IMAGE:latest \
+        product-service/
+    - docker push $PRODUCT_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $PRODUCT_IMAGE:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+docker:order-service:
+  stage: docker
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - |
+      docker build \
+        --tag $ORDER_IMAGE:$CI_COMMIT_SHORT_SHA \
+        --tag $ORDER_IMAGE:latest \
+        --cache-from $ORDER_IMAGE:latest \
+        order-service/
+    - docker push $ORDER_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $ORDER_IMAGE:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ═══════════════════════════════════════════════════════════════════
+# STAGE 5 — DEPLOY
+# ═══════════════════════════════════════════════════════════════════
+
+deploy:staging:
+  stage: deploy
+  script:
+    - echo "Deploy to staging"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
