@@ -12,7 +12,7 @@
 	<groupId>com.academy</groupId>
 	<artifactId>order-service</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<n>order-service</n>
+	<name>order-service</name>
 	<description>Demo project for Spring Boot</description>
 
 	<properties>
@@ -71,12 +71,10 @@
 				<artifactId>jacoco-maven-plugin</artifactId>
 				<version>0.8.11</version>
 				<executions>
-					<!-- Prepara o agente JaCoCo antes dos testes -->
 					<execution>
 						<id>prepare-agent</id>
 						<goals><goal>prepare-agent</goal></goals>
 					</execution>
-					<!-- Gera o relatório XML após os testes -->
 					<execution>
 						<id>report</id>
 						<phase>verify</phase>
@@ -91,7 +89,6 @@
 				<artifactId>maven-surefire-plugin</artifactId>
 				<version>3.2.5</version>
 				<configuration>
-					<!-- Gerar relatórios XML para o GitLab CI -->
 					<reportFormat>xml</reportFormat>
 					<useFile>true</useFile>
 				</configuration>
